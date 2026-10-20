@@ -16,10 +16,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from agent.terminal_env_provider import TerminalEnvironmentProvider
 
+from . import windows, windows_files
 from .config import Settings, load_settings
 from .errors import CuaSpacesError
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 _client_lock = threading.Lock()
 _client: Any = None
@@ -48,6 +49,7 @@ class CuaSpacesProvider(TerminalEnvironmentProvider):
     def __init__(self, get_config: Any = None, client: Any = None) -> None:
         self._get_config = get_config
         self._client_override = client
+        self._windows_seen = False
 
     # -- what Hermes shows and decides on --
     @property
@@ -56,7 +58,9 @@ class CuaSpacesProvider(TerminalEnvironmentProvider):
 
     @property
     def env_description(self) -> str:
-        return "a Cua Space (an isolated Linux machine)"
+        if self._windows_seen:
+            return f"a Cua Space (an isolated Windows machine). {windows.TERMINAL_NOTE}"
+        return "a Cua Space (an isolated Linux, macOS or Windows machine)"
 
     @property
     def skip_container_guards(self) -> bool:
@@ -110,14 +114,19 @@ class CuaSpacesProvider(TerminalEnvironmentProvider):
         settings: Settings = load_settings(self._get_config)
         persistent = bool((container_config or {}).get("container_persistent", True))
         client = self._client_override or _shared_client()
-        return CuaSpaceEnvironment(
+        env = CuaSpaceEnvironment(
             cwd=cwd, timeout=timeout, task_id=task_id, settings=settings, client=client, persistent=persistent
         )
+        if env.is_windows:
+            self._windows_seen = True
+            windows_files.install()
+        return env
 
 
 def register(ctx) -> None:
     """Plugin entry point."""
     get_config = getattr(ctx, "get_config", None)
+    windows_files.install()
     ctx.register_terminal_environment_provider(CuaSpacesProvider(get_config=get_config))
 
 

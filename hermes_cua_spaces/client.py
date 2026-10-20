@@ -20,7 +20,6 @@ from .errors import (
     CuaSpacesError,
     SpaceCreateError,
     SpaceNotFoundError,
-    UnsupportedSpaceError,
     explain,
 )
 
@@ -39,6 +38,7 @@ class ExecResult:
 class SpaceHandle(Protocol):
     id: str
     name: str
+    os: str  # "linux", "macos" or "windows" ("" when the Space did not say)
 
     def run(self, command: str, timeout_s: float) -> ExecResult: ...
 
@@ -79,6 +79,7 @@ class _SdkSpace:
         self._space = space
         self.id: str = info.id
         self.name: str = info.name
+        self.os: str = (getattr(info, "os", "") or "").lower()
 
     def run(self, command: str, timeout_s: float) -> ExecResult:
         timeout_ms = max(1, int(timeout_s * 1000))
@@ -155,11 +156,6 @@ class SdkSpacesClient:
 
     def attach(self, space: str) -> SpaceHandle:
         info = self._ensure_running(self._resolve(space))
-        if getattr(info, "os", "") == "windows":
-            raise UnsupportedSpaceError(
-                f"The Space '{info.name}' is a Windows machine. Hermes needs a Linux or macOS Space for "
-                "its terminal."
-            )
         return self._handle(info)
 
     def ensure(self, name: str, settings: Settings) -> tuple[SpaceHandle, bool]:

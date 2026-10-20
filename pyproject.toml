@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hermes-cua-spaces"
-version = "0.1.0"
-description = "Hermes Agent terminal backend that runs commands inside a Cua Space"
+version = "0.2.0"
+description = "Hermes Agent terminal backend that runs commands inside a Cua Space (Linux, macOS or Windows)"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Cua", email = "hello@trycua.com" }]

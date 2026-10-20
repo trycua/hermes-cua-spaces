@@ -6,7 +6,7 @@ import types
 import pytest
 
 from hermes_cua_spaces.config import Settings
-from hermes_cua_spaces.errors import NotSignedInError, SpaceCreateError, UnsupportedSpaceError
+from hermes_cua_spaces.errors import NotSignedInError, SpaceCreateError
 
 
 class Info:
@@ -116,11 +116,17 @@ def test_attach_starts_stopped_space(sdk):
     assert spaces.started == ["local:old"]
 
 
-def test_windows_space_refused(sdk):
+def test_windows_space_is_attached(sdk):
     client, spaces = sdk
     spaces.infos["win"] = Info("win", os="windows")
-    with pytest.raises(UnsupportedSpaceError):
-        client.attach("win")
+    handle = client.attach("win")
+    assert handle.os == "windows"
+
+
+def test_linux_space_reports_its_os(sdk):
+    client, spaces = sdk
+    spaces.infos["lin"] = Info("lin")
+    assert client.attach("lin").os == "linux"
 
 
 def test_run_merges_streams_and_maps_codes(sdk):

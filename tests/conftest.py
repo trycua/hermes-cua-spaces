@@ -57,6 +57,8 @@ class FakeClient:
 
 @pytest.fixture
 def space(tmp_path):
+    if sys.platform.startswith("win"):
+        pytest.skip("this stand-in Space runs /bin/sh; the Windows tests cover Windows")
     return LocalShellSpace(tmp_path)
 
 

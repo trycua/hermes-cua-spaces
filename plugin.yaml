@@ -1,7 +1,7 @@
 name: cua-spaces
-version: "0.1.0"
+version: "0.2.0"
 manifest_version: 2
-description: Run Hermes terminal, file and code tools inside a Cua Space (an isolated Linux machine you can watch live).
+description: Run Hermes terminal, file and code tools inside a Cua Space (an isolated Linux, macOS or Windows machine you can watch live).
 author: Cua
 kind: backend
 license: MIT

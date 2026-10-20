@@ -11,14 +11,32 @@ from typing import Any, Callable, Optional
 
 from tools.environments.base import BaseEnvironment
 
+from . import windows as win
 from .client import ExecResult, SpaceHandle, SpacesClient
 from .config import Settings, space_name_for
-from .errors import CuaSpacesError
+from .errors import CuaSpacesError, UnsupportedSpaceError
 
 logger = logging.getLogger(__name__)
 
 # Hermes passes its generic container default ("/root") when the user set no working folder.
 _GENERIC_CWDS = ("", "/root", "~")
+
+
+class _WindowsScript(str):
+    """What `_wrap_command` hands `_run_bash` on a Windows Space: the command and where it runs.
+
+    `kind` is "ps" for the terminal tool (PowerShell) and "sh" for the Unix shell commands Hermes
+    builds for its other tools (Git Bash). The text itself is only a readable tag.
+    """
+
+    kind: str
+    command: str
+    cwd: str
+
+    def __new__(cls, kind: str, command: str, cwd: str) -> "_WindowsScript":
+        obj = super().__new__(cls, f"# hermes-cua {kind} script for a Windows Space")
+        obj.kind, obj.command, obj.cwd = kind, command, cwd
+        return obj
 
 
 class _SpaceProcess:
@@ -75,6 +93,9 @@ class CuaSpaceEnvironment(BaseEnvironment):
     """Runs each Hermes command as `bash -c` inside a Cua Space.
 
     Terminal, file and code tools all go through `execute()`, so they all land in the Space.
+
+    On a Windows Space the terminal tool runs in PowerShell, file read/write/patch run natively,
+    and Hermes's Unix-shell tools run in Git Bash when the Space has it. See `windows.py`.
     """
 
     # Input for a command is staged as a file in the Space (see _run_bash), not embedded in the command.
@@ -108,10 +129,91 @@ class CuaSpaceEnvironment(BaseEnvironment):
             self._space = client.attach(settings.space)
             self._delete_on_cleanup = False  # a Space you named is yours: never delete it
 
-        if cwd in _GENERIC_CWDS:
+        self._win: Optional[win.WindowsInfo] = None
+        self._thread_state = threading.local()
+        if getattr(self._space, "os", "") == "windows":
+            self._win = self._probe_windows()
+            self._windows_files = None
+            if cwd in _GENERIC_CWDS or not win.looks_like_windows_path(cwd):
+                cwd = self._win.home  # the user profile folder
+        elif cwd in _GENERIC_CWDS:
             cwd = self._space.home()
         super().__init__(cwd=cwd, timeout=timeout)
-        self.init_session()
+        if self._win is None:
+            self.init_session()
+
+    # -- Windows Spaces --
+    @property
+    def is_windows(self) -> bool:
+        return self._win is not None
+
+    @property
+    def windows_info(self) -> Optional[win.WindowsInfo]:
+        return self._win
+
+    @property
+    def windows_files(self):
+        """Native file read/write for a Windows Space (None on Linux and macOS)."""
+        if self._win is None:
+            return None
+        if self._windows_files is None:
+            from .windows_files import WindowsFiles
+
+            self._windows_files = WindowsFiles(self)
+        return self._windows_files
+
+    def get_temp_dir(self) -> str:
+        win_info = getattr(self, "_win", None)
+        return win_info.temp if win_info is not None else super().get_temp_dir()
+
+    def _probe_windows(self) -> win.WindowsInfo:
+        try:
+            result = self._call(lambda sp: sp.run(win.probe_line(), 90))
+        except CuaSpacesError:
+            raise
+        info = win.parse_probe(result.output) if result.exit_code == 0 else None
+        if info is None:
+            raise UnsupportedSpaceError(
+                f"Could not start PowerShell in the Windows Space '{self._space.name}'. Hermes runs its "
+                "commands there with PowerShell. Check that the Space is running (`cua spaces ls`) and "
+                "that `powershell.exe` works in it."
+            )
+        logger.info(
+            "Windows Space %s: shell=%s, git bash=%s", self._space.name, info.shell, info.bash or "none"
+        )
+        return info
+
+    def run_powershell(self, script: str, timeout: int = 120) -> ExecResult:
+        """Run a PowerShell script in the Windows Space and return its output and exit code.
+
+        For the plugin's own file operations. The script should print only ASCII (for example base64).
+        """
+        info = self._win
+        assert info is not None
+        path = win.script_path(info, uuid.uuid4().hex[:16], "ps1")
+        text = (
+            f"try {{\n{script}\n}} finally {{\n"
+            "  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue\n}\n"
+        )
+        self._call(lambda sp: sp.write(path, text.encode("utf-8-sig")))
+        return self._call(lambda sp: sp.run(win.powershell_line(info, path), timeout))
+
+    def execute(self, command: str, cwd: str = "", *, bounded_capture: bool = False, **kwargs: Any) -> dict:
+        if self._win is not None:
+            # Only the foreground terminal tool sets bounded_capture. It is the one caller that sends
+            # a command a person or model wrote for this machine, so it goes to PowerShell. The rest
+            # are Unix shell commands Hermes built itself. Hermes's bash-only rewrite of `A && B &` must
+            # not touch PowerShell.
+            self._thread_state.foreground = bool(bounded_capture)
+            if bounded_capture:
+                kwargs["rewrite_compound_background"] = False
+        return super().execute(command, cwd, bounded_capture=bounded_capture, **kwargs)
+
+    def _wrap_command(self, command: str, cwd: str) -> str:
+        if self._win is None:
+            return super()._wrap_command(command, cwd)
+        kind = "ps" if getattr(self._thread_state, "foreground", False) else "sh"
+        return _WindowsScript(kind, command, cwd)
 
     # -- identity (used in messages and by the README's "watch it live" step) --
     @property
@@ -126,6 +228,8 @@ class CuaSpaceEnvironment(BaseEnvironment):
     def _run_bash(
         self, cmd_string: str, *, login: bool = False, timeout: int = 120, stdin_data: Optional[str] = None
     ) -> _SpaceProcess:
+        if isinstance(cmd_string, _WindowsScript):
+            return self._run_windows(cmd_string, timeout=timeout, stdin_data=stdin_data)
         run_id = uuid.uuid4().hex[:16]
         script = f": hermes-cua-run-{run_id}\n{cmd_string}"
         staged: Optional[str] = None
@@ -154,6 +258,51 @@ class CuaSpaceEnvironment(BaseEnvironment):
             )
             try:
                 self._space.run(kill, 20)
+            except Exception:
+                logger.debug("could not stop command %s in the Space", run_id, exc_info=True)
+
+        return _SpaceProcess(exec_fn, cancel)
+
+    def _run_windows(self, script: _WindowsScript, *, timeout: int, stdin_data: Optional[str]) -> _SpaceProcess:
+        info = self._win
+        assert info is not None
+        run_id = uuid.uuid4().hex[:16]
+
+        def stage(path: str, text: str, *, bom: bool = False) -> None:
+            data = text.encode("utf-8-sig" if bom else "utf-8", "surrogateescape")
+            self._call(lambda sp: sp.write(path, data))
+
+        def exec_fn() -> tuple[str, int]:
+            try:
+                if script.kind == "ps":
+                    staged_in = ""
+                    if stdin_data is not None:
+                        staged_in = self._staged_stdin_path()
+                        stage(staged_in, stdin_data)
+                    ps_path = win.script_path(info, run_id, "ps1")
+                    stage(ps_path, win.build_powershell_script(script.command, script.cwd, self._cwd_marker, staged_in), bom=True)
+                    line = win.powershell_line(info, ps_path)
+                else:
+                    if not info.bash:
+                        return (win.NO_BASH_MESSAGE + "\n", 127)
+                    command = script.command
+                    if stdin_data is not None:
+                        staged_in = self._staged_stdin_path()
+                        stage(staged_in, stdin_data)
+                        command = self._redirect_stdin_from_file(command, staged_in)
+                    sh_path = win.script_path(info, run_id, "sh")
+                    ps_path = win.script_path(info, run_id, "ps1")
+                    stage(sh_path, win.build_bash_script(command, script.cwd, self._cwd_marker))
+                    stage(ps_path, win.build_bash_launcher(info, sh_path), bom=True)
+                    line = win.powershell_line(info, ps_path)
+                result: ExecResult = self._call(lambda sp: sp.run(line, timeout))
+            except CuaSpacesError as exc:
+                return (f"[Cua Space error: {exc}]\n", 1)
+            return (result.output, result.exit_code)
+
+        def cancel() -> None:
+            try:
+                self._space.run(win.cancel_line(info, run_id), 30)
             except Exception:
                 logger.debug("could not stop command %s in the Space", run_id, exc_info=True)
 
