@@ -18,10 +18,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install the plugin, its tests and Hermes
+      - name: Get Hermes
+        shell: bash
+        run: |
+          git config --global core.longpaths true
+          git clone --depth 1 https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
+      - name: Install Hermes, the plugin and its tests
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[test]" "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git"
+          python -m pip install -e "$RUNNER_TEMP/hermes-agent"
+          python -m pip install -e ".[test]"
       - name: Show which PowerShell and bash the Windows tests will use
         shell: bash
         run: |
