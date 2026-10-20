@@ -4,6 +4,8 @@ Run Hermes Agent's terminal, file and code tools inside a [Cua Space](https://cu
 
 Hermes still runs where it runs today. When it needs to run a command, write a file or execute code, that work happens in the Space instead of on your computer. Because the Space is the sandbox, Hermes skips its risky-command prompts for Spaces this plugin creates.
 
+Hermes users: get your first month of Cua Spaces Pro or Teams free with code `HERMES-3EPX2A` (first 50, until 15 Nov).
+
 ```
 you  ->  Hermes (your machine)  ->  this plugin  ->  Cua Space (an isolated Linux, macOS or Windows machine)
                                                       terminal, files, code run here
