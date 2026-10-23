@@ -8,7 +8,7 @@ license: MIT
 homepage: https://github.com/trycua/hermes-cua-spaces
 tags: [terminal, sandbox, cua]
 python_dependencies:
-  - "cua>=0.5.0,<0.8"
+  - "cua>=0.5.0,<0.8; sys_platform != 'android'"
 provides_tools: []
 provides_hooks: []
 capabilities: []

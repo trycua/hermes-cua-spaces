@@ -10,7 +10,7 @@ readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Cua", email = "hello@trycua.com" }]
 requires-python = ">=3.11"
-dependencies = ["cua>=0.5.0,<0.8"]
+dependencies = ["cua>=0.5.0,<0.8; sys_platform != 'android'"]
 
 [project.optional-dependencies]
 test = ["pytest"]
