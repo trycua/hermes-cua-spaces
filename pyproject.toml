@@ -4,16 +4,18 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hermes-cua-spaces"
-version = "0.4.0"
+version = "0.4.1"
 description = "Hermes Agent terminal backend that runs commands inside a Cua Space (Linux, macOS or Windows)"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Cua", email = "hello@trycua.com" }]
 requires-python = ">=3.11"
-dependencies = ["cua>=0.5.0,<0.8"]
+# `cua` ships wheels for macOS, Linux and Windows only. Hermes locks plugins for Android too, so the
+# marker keeps that lock solvable (tests/test_dependencies.py, scripts/check_hermes_lock.py).
+dependencies = ["cua>=0.5.0,<0.8; sys_platform != 'android'"]
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "pyyaml", "packaging"]
 
 [project.urls]
 Homepage = "https://github.com/trycua/hermes-cua-spaces"
