@@ -38,9 +38,15 @@ jobs:
       - name: Install Hermes, the plugin and its tests
         shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e "$RUNNER_TEMP/hermes-agent"
-          python -m pip install -e ".[test]"
+          # Hermes holds a few packages with [tool.uv] override-dependencies that pip cannot see, so
+          # pip alone cannot install it. Install with uv and apply the same overrides.
+          python -m pip install --upgrade pip uv
+          python - "$RUNNER_TEMP/hermes-agent/pyproject.toml" "$RUNNER_TEMP/overrides.txt" <<'PY'
+          import sys, tomllib
+          doc = tomllib.load(open(sys.argv[1], "rb"))
+          open(sys.argv[2], "w").write("\n".join(doc.get("tool", {}).get("uv", {}).get("override-dependencies", [])) + "\n")
+          PY
+          uv pip install --system --override "$RUNNER_TEMP/overrides.txt" -e "$RUNNER_TEMP/hermes-agent" -e ".[test]"
       - name: Show which PowerShell and bash the Windows tests will use
         shell: bash
         run: |
