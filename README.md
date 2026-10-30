@@ -195,15 +195,17 @@ The plugin explains errors in plain words and says what to run next. The most co
 uv venv --python 3.14 && source .venv/bin/activate
 # Hermes: clone a tag and install it editable. The PyPI "hermes-agent" is old and has no plugin API,
 # and Hermes cannot be built into a wheel from git.
-git clone --depth 1 --branch v0.22.3 https://github.com/NousResearch/hermes-agent.git ../hermes-agent   # latest release
+git clone --depth 1 --branch v0.22.5 https://github.com/NousResearch/hermes-agent.git ../hermes-agent   # latest release
 # or, for the start-directory and Bot Desktop support: --branch main
 pip install -e ../hermes-agent
 pip install -e ".[test]"
 pytest
 hermes plugins validate . --install-deps
+# Reproduce Hermes's plugin admission lock (uv lock across every platform Hermes supports, Android included):
+python scripts/check_hermes_lock.py ../hermes-agent
 ```
 
-The tests run the whole environment against a local shell standing in for a Space, so they need no Cua account. The Windows tests use PowerShell 7 (`pwsh`) as the stand-in and skip themselves when it is missing; on a Windows machine they run in real Windows PowerShell. CI runs them on Linux, macOS and Windows, against the latest Hermes release and against Hermes main.
+The tests run the whole environment against a local shell standing in for a Space, so they need no Cua account. The Windows tests use PowerShell 7 (`pwsh`) as the stand-in and skip themselves when it is missing; on a Windows machine they run in real Windows PowerShell. CI runs them on Linux, macOS and Windows, against the latest Hermes release and against Hermes main, and also runs that admission lock so a dependency without wheels for a platform Hermes locks for (such as Android) cannot slip in. `cua` has no Android build, so it is declared with `sys_platform != 'android'`; this plugin does not run on Android.
 
 ## Licence
 
