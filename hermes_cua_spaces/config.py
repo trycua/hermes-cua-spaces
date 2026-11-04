@@ -105,4 +105,4 @@ def space_name_for(task_id: str, unique: bool = False) -> str:
     """
     base = _SAFE.sub("-", f"{task_id or 'default'}".lower()).strip("-")[:24] or "default"
     name = f"hermes-{base}"
-    return f"{name}-{uuid.uuid4().hex[:6]}" if unique else name
+    return f"{name}-{uuid.uuid4().hex[:24]}" if unique else name
