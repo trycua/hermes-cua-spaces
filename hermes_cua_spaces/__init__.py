@@ -20,7 +20,7 @@ from . import streams, windows
 from .config import Settings, load_settings
 from .errors import CuaSpacesError
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 _client_lock = threading.Lock()
 _client: Any = None

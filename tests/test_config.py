@@ -51,5 +51,9 @@ def test_delete_on_exit_default_and_overrides():
 
 
 def test_unique_names_differ():
-    assert space_name_for("a", unique=True) != space_name_for("a", unique=True)
-    assert space_name_for("a", unique=True).startswith("hermes-a-")
+    first = space_name_for("a", unique=True)
+    second = space_name_for("a", unique=True)
+    assert first != second
+    assert first.startswith("hermes-a-")
+    assert len(first.rsplit("-", 1)[-1]) == 24
+    assert len(first) <= 63

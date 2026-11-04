@@ -12,6 +12,8 @@ import pytest
 import yaml
 from packaging.requirements import Requirement
 
+import hermes_cua_spaces
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -35,6 +37,7 @@ def test_pyproject_and_manifest_declare_the_same_dependencies():
 
 def test_versions_agree():
     assert _pyproject()["project"]["version"] == _manifest()["version"]
+    assert hermes_cua_spaces.__version__ == _pyproject()["project"]["version"]
 
 
 @pytest.mark.parametrize("specs", [
